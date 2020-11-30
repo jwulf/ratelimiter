@@ -1,4 +1,4 @@
-# Rate Limit
+# Rate Limiter
 
 A functional rate limiter to avoid saturating external resources.
 
