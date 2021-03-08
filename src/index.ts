@@ -23,13 +23,18 @@ export class RateLimiter {
   private priorityQueue: QueuedTask<any>[] = [];
   private preemptibleQueue: QueuedTask<any>[] = [];
   private rateLimiting?: NodeJS.Timeout;
+  private ratio: number;
+  private counter: number;
 
   /**
    *
    * @param rateLimitToMs minimum number of milliseconds between operations
+   * @param ratio a ratio of priority tasks to preemptible tasks, to prevent starvation. Default: 3
    */
-  constructor(rateLimitToMs: number) {
+  constructor(rateLimitToMs: number, ratio: number = 3) {
     this.debounceMs = rateLimitToMs;
+    this.ratio = ratio;
+    this.counter = 1;
   }
 
   /**
@@ -56,25 +61,43 @@ export class RateLimiter {
     }
   }
 
-  private runImmediately() {
-    const toRun: QueuedTask<any> | undefined = this.priorityQueue.length
-      ? this.priorityQueue.pop()
-      : this.preemptibleQueue.pop();
+  private runImmediately(): void {
+    const drainPreemptibleQueue = this.counter === 0;
+    const toRun = drainPreemptibleQueue
+      ? this.preemptibleQueue.pop() || this.priorityQueue.pop()
+      : this.priorityQueue.pop() || this.preemptibleQueue.pop();
 
     if (!toRun) {
+      this.counter = 1;
       return;
     }
 
-    const hasQueuedTasks =
+    const hasFurtherQueuedTasks =
       !!this.priorityQueue.length || !!this.preemptibleQueue.length;
 
-    if (hasQueuedTasks) {
+    if (hasFurtherQueuedTasks) {
       this.rateLimiting = setTimeout(() => {
         this.rateLimiting = undefined;
         this.runImmediately();
       }, this.debounceMs);
     }
     const promise = toRun.promise;
-    toRun.task().then(promise.resolve).catch(promise.reject);
+
+    this.counter = (this.counter + 1) % (this.ratio + 1);
+    try {
+      const res = toRun.task();
+      const taskIsPromiseLike = res.then !== undefined;
+
+      if (taskIsPromiseLike) {
+        res.catch(promise.reject);
+        res.then(promise.resolve);
+        return;
+      }
+      promise.resolve(res);
+      return;
+    } catch (e) {
+      promise.reject(e);
+      return;
+    }
   }
 }

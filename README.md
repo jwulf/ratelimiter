@@ -38,3 +38,9 @@ limit.runRateLimited({
     task: () => foregroundTask(req)
 })
 ```
+
+## Preventing preemptible queue starvation 
+
+To prevent preemptible queue starvation - where only priority queue tasks are processed and no preemptible tasks ever get serviced under load - there is an optional second parameter to the constructor.
+
+This is the `ratio` - it is 3 by default. Under load, three priority tasks will be processed, then a task will be processed from the preemptible task queue.
