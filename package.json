@@ -1,18 +1,22 @@
 {
     "name": "@sitapati/ratelimiter",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "main": "dist/index.js",
     "repository": {
         "url": "https://github.com/jwulf/ratelimit"
     },
     "scripts": {
         "build": "tsc",
-        "prepublishOnly": "tsc"
+        "prepublishOnly": "tsc",
+        "test": "jest"
     },
     "dependencies": {
         "@types/node": "^14.14.10"
     },
     "devDependencies": {
-        "typescript": "^4.1.2"
+        "@types/jest": "^26.0.20",
+        "jest": "^26.6.3",
+        "ts-jest": "^26.5.3",
+        "typescript": "^4.2.3"
     }
 }

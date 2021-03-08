@@ -23,8 +23,8 @@ export class RateLimiter {
   private priorityQueue: QueuedTask<any>[] = [];
   private preemptibleQueue: QueuedTask<any>[] = [];
   private rateLimiting?: NodeJS.Timeout;
-  private ratio: number;
-  private counter: number;
+  private priorityToPreemptibleRatio: number;
+  private preemptibleStarvationAvoidanceCounter: number;
 
   /**
    *
@@ -33,8 +33,8 @@ export class RateLimiter {
    */
   constructor(rateLimitToMs: number, ratio: number = 3) {
     this.debounceMs = rateLimitToMs;
-    this.ratio = ratio;
-    this.counter = 1;
+    this.priorityToPreemptibleRatio = ratio;
+    this.preemptibleStarvationAvoidanceCounter = 1;
   }
 
   /**
@@ -62,31 +62,31 @@ export class RateLimiter {
   }
 
   private runImmediately(): void {
-    const drainPreemptibleQueue = this.counter === 0;
+    const drainPreemptibleQueue =
+      this.preemptibleStarvationAvoidanceCounter === 0;
     const toRun = drainPreemptibleQueue
-      ? this.preemptibleQueue.pop() || this.priorityQueue.pop()
-      : this.priorityQueue.pop() || this.preemptibleQueue.pop();
+      ? this.preemptibleQueue.shift() || this.priorityQueue.shift()
+      : this.priorityQueue.shift() || this.preemptibleQueue.shift();
 
-    if (!toRun) {
-      this.counter = 1;
+    if (toRun === undefined) {
+      this.preemptibleStarvationAvoidanceCounter = 1;
       return;
     }
 
-    const hasFurtherQueuedTasks =
-      !!this.priorityQueue.length || !!this.preemptibleQueue.length;
+    this.rateLimiting = setTimeout(() => {
+      this.rateLimiting = undefined;
+      this.runImmediately();
+    }, this.debounceMs);
 
-    if (hasFurtherQueuedTasks) {
-      this.rateLimiting = setTimeout(() => {
-        this.rateLimiting = undefined;
-        this.runImmediately();
-      }, this.debounceMs);
-    }
     const promise = toRun.promise;
 
-    this.counter = (this.counter + 1) % (this.ratio + 1);
+    this.preemptibleStarvationAvoidanceCounter =
+      (this.preemptibleStarvationAvoidanceCounter + 1) %
+      (this.priorityToPreemptibleRatio + 1);
+
     try {
       const res = toRun.task();
-      const taskIsPromiseLike = res.then !== undefined;
+      const taskIsPromiseLike = res?.then !== undefined;
 
       if (taskIsPromiseLike) {
         res.catch(promise.reject);
